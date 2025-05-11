@@ -1,12 +1,19 @@
-// websocket.js
-// This module sets up a WebSocket server to handle real-time communication with devices.
-// It listens for new feed commands and notifies the connected devices.
-
+require('./config/dotenv');
 const { db } = require('./config/firebase');
+
+const API_KEY = process.env.API_KEY || 'secret_api_key';
 
 function setupWebSocket(server) {
   const { Server } = require('socket.io');
   const io = new Server(server, { cors: { origin: '*' } });
+
+  io.use((socket, next) => {
+    const apiKey = socket.handshake.auth?.apiKey || socket.handshake.headers['x-api-key'];
+    if (apiKey !== API_KEY) {
+      return next(new Error('Unauthorized'));
+    }
+    next();
+  });
 
   io.on('connection', (socket) => {
     socket.on('subscribeHistories', (deviceId) => {

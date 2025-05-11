@@ -1,14 +1,18 @@
 // index.js
 // This script sets up an Express server and WebSocket connection for the smart feeder device.
 
+require('./config/env'); 
+
 const express = require('express');
 const bodyParser = require('body-parser');
 const http = require('http');
 const deviceRoutes = require('./routes/deviceRoutes');
 const { setupWebSocket } = require('./websocket');
+const authMiddleware = require('./middleware/authMiddleware');
 
 const app = express();
 app.use(bodyParser.json());
+app.use(authMiddleware); 
 app.use('/api', deviceRoutes);
 
 const server = http.createServer(app);
