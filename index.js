@@ -1,7 +1,7 @@
 // index.js
 // This script sets up an Express server and WebSocket connection for the smart feeder device.
 
-require('./config/env'); 
+require('./config/dotenv');
 
 const express = require('express');
 const bodyParser = require('body-parser');
