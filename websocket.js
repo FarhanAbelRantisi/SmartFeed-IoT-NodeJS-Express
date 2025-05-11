@@ -1,34 +1,82 @@
 require('./config/dotenv');
 const { db } = require('./config/firebase');
+const WebSocket = require('ws');
 
 const API_KEY = process.env.API_KEY || 'secret_api_key';
 
 function setupWebSocket(server) {
-  const { Server } = require('socket.io');
-  const io = new Server(server, { cors: { origin: '*' } });
+  const wss = new WebSocket.Server({ server });
 
-  io.use((socket, next) => {
-    const apiKey = socket.handshake.auth?.apiKey || socket.handshake.headers['x-api-key'];
+  const wsListeners = new Map();
+
+  wss.on('connection', (ws, req) => {
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    const apiKeyQuery = url.searchParams.get('x-api-key');
+    const apiKeyHeader = req.headers['x-api-key'];
+    const apiKey = apiKeyQuery || apiKeyHeader;
+
     if (apiKey !== API_KEY) {
-      return next(new Error('Unauthorized'));
+      ws.close(4001, 'Unauthorized');
+      console.log('API key received:', apiKey);
+      console.log('Full req.url:', req.url);
+      return;
     }
-    next();
-  });
 
-  io.on('connection', (socket) => {
-    socket.on('subscribeHistories', (deviceId) => {
-      const unsubscribe = db.collection('devices').doc(deviceId)
-        .collection('histories')
-        .orderBy('triggeredAt', 'desc')
-        .limit(1)
-        .onSnapshot(snapshot => {
-          snapshot.docChanges().forEach(change => {
-            if (change.type === 'added') {
-              socket.emit('newHistory', { id: change.doc.id, ...change.doc.data() });
+    ws.on('message', async (message) => {
+      let parsed;
+      try {
+        parsed = JSON.parse(message);
+      } catch {
+        return;
+      }
+      if (parsed.event === 'subscribeHistories' && typeof parsed.data === 'string') {
+        const deviceId = parsed.data;
+        if (wsListeners.has(ws)) {
+          const { historiesUnsub, scheduleUnsub } = wsListeners.get(ws);
+          if (historiesUnsub) historiesUnsub();
+          if (scheduleUnsub) scheduleUnsub();
+        }
+        const historiesUnsub = db.collection('devices').doc(deviceId)
+          .collection('histories')
+          .orderBy('triggeredAt', 'desc')
+          .limit(1)
+          .onSnapshot(snapshot => {
+            snapshot.docChanges().forEach(change => {
+              if (change.type === 'added') {
+                ws.send(JSON.stringify({
+                  event: 'newHistory',
+                  data: { id: change.doc.id, ...change.doc.data() }
+                }));
+              }
+            });
+          });
+        let lastFeedingSchedule = null;
+        const scheduleUnsub = db.collection('devices').doc(deviceId)
+          .onSnapshot(doc => {
+            if (!doc.exists) return;
+            const data = doc.data();
+            if (
+              data.feedingSchedule &&
+              JSON.stringify(data.feedingSchedule) !== JSON.stringify(lastFeedingSchedule)
+            ) {
+              lastFeedingSchedule = data.feedingSchedule;
+              ws.send(JSON.stringify({
+                event: 'feedingSchedule',
+                data: data.feedingSchedule
+              }));
             }
           });
-        });
-      socket.on('disconnect', unsubscribe);
+        wsListeners.set(ws, { historiesUnsub, scheduleUnsub });
+      }
+    });
+
+    ws.on('close', () => {
+      if (wsListeners.has(ws)) {
+        const { historiesUnsub, scheduleUnsub } = wsListeners.get(ws);
+        if (historiesUnsub) historiesUnsub();
+        if (scheduleUnsub) scheduleUnsub();
+        wsListeners.delete(ws);
+      }
     });
   });
 }

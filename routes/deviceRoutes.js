@@ -82,4 +82,17 @@ router.post('/devices/:deviceId/listen', (req, res) => {
   res.sendStatus(200);
 });
 
+// 6. Update feedLevel in history
+router.patch('/devices/:deviceId/histories/:historyId/feed-level', async (req, res) => {
+  const { deviceId, historyId } = req.params;
+  const { feedLevel } = req.body;
+  if (typeof feedLevel !== 'number') {
+    return res.status(400).json({ error: 'feedLevel must be a number' });
+  }
+  await db.collection('devices').doc(deviceId)
+    .collection('histories').doc(historyId)
+    .update({ feedLevel });
+  res.sendStatus(200);
+});
+
 module.exports = router;
