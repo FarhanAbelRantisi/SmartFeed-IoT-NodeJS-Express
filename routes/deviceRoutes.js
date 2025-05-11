@@ -67,7 +67,7 @@ router.post('/devices/:deviceId/notify', async (req, res) => {
     tokensSnap.forEach(tokenDoc => tokens.push(tokenDoc.data().token));
   }
   if (tokens.length > 0) {
-    await admin.messaging().sendMulticast({
+    await admin.messaging().sendEachForMulticast({
       tokens,
       notification: { title, body: message }
     });
