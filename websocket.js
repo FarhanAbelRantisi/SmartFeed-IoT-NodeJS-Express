@@ -50,31 +50,29 @@ function setupWebSocket(server) {
               }
             });
           });
-        let lastFeedingSchedule = null;
-        const scheduleUnsub = db.collection('devices').doc(deviceId)
+        let lastDeviceData = null;
+        const deviceUnsub = db.collection('devices').doc(deviceId)
           .onSnapshot(doc => {
             if (!doc.exists) return;
             const data = doc.data();
-            if (
-              data.feedingSchedule &&
-              JSON.stringify(data.feedingSchedule) !== JSON.stringify(lastFeedingSchedule)
-            ) {
-              lastFeedingSchedule = data.feedingSchedule;
+            if (JSON.stringify(data) !== JSON.stringify(lastDeviceData)) {
+              lastDeviceData = data;
               ws.send(JSON.stringify({
-                event: 'feedingSchedule',
-                data: data.feedingSchedule
+                event: 'device',
+                data: { id: doc.id, ...data }
               }));
             }
           });
-        wsListeners.set(ws, { historiesUnsub, scheduleUnsub });
+
+        wsListeners.set(ws, { historiesUnsub, deviceUnsub });
       }
     });
 
     ws.on('close', () => {
       if (wsListeners.has(ws)) {
-        const { historiesUnsub, scheduleUnsub } = wsListeners.get(ws);
+        const { historiesUnsub, deviceUnsub } = wsListeners.get(ws);
         if (historiesUnsub) historiesUnsub();
-        if (scheduleUnsub) scheduleUnsub();
+        if (deviceUnsub) deviceUnsub();
         wsListeners.delete(ws);
       }
     });

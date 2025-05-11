@@ -91,8 +91,12 @@ node misc/simulator.js
 
 The simulator will:
 - Activate a real-time listener for the device.
-- Listen for feeding commands via WebSocket.
-- Periodically report feed level.
+- Connect to the WebSocket server using the API key (as a query param).
+- Subscribe to device histories and receive:
+  - All existing histories (`allHistories` event).
+  - New feeding commands in real-time (`newHistory` event).
+  - Device data updates (`device` event).
+- Periodically report feed level (auto-feed).
 - Update feed level after manual feeding.
 
 ---
@@ -117,17 +121,28 @@ All endpoints require the header:
 - **POST** `/api/devices/:deviceId/listen`  
   Activate real-time listener for the device (call once per device).
 
+- **PATCH** `/api/devices/:deviceId/histories/:historyId/feed-level`  
+  Update the feed level of a specific history entry.
+
 ---
 
 ## WebSocket
 
 - **Endpoint:**  
-  `ws://localhost:3000`
+  `ws://localhost:3000/?x-api-key=<API_KEY>`
 - **Auth:**  
-  Send `{ auth: { apiKey: <API_KEY> } }` when connecting.
+  Pass the API key as a query parameter (`x-api-key`) or as a header.
 - **Events:**  
-  - `subscribeHistories` (deviceId) — subscribe to device histories updates.
-  - `newHistory` — receive new feeding commands in real-time.
+  - Send:  
+    ```json
+    { "event": "subscribeHistories", "data": "<deviceId>" }
+    ```
+    to subscribe to device histories.
+  - Receive:
+    - `allHistories`: All existing histories for the device.
+    - `newHistory`: New feeding command in real-time.
+    - `device`: Device data updates in real-time.
+    - `error`: Error messages.
 
 ---
 
