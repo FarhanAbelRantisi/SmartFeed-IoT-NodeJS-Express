@@ -14,6 +14,7 @@ function setupDeviceListener(deviceId) {
       if (typeof feedLevel === 'number' && typeof foodLevelThreshold === 'number' && feedLevel < foodLevelThreshold) {
         const title = feedLevel === 0 ? "0 Feed Level! Gimme food!" : "Low Feed Level";
         const message = (feedLevel === 0 ? "Stupid human! " : "") + `Feed level is below threshold: ${feedLevel}%. Refill immediately!`;
+        const action = (feedLevel === 0 ? "zeroFeedAction" : "lowFeedAction");
 
         await db.collection('devices').doc(deviceId)
           .collection('notifications').add({
@@ -34,7 +35,8 @@ function setupDeviceListener(deviceId) {
         if (tokens.length > 0) {
           await admin.messaging().sendEachForMulticast({
             tokens,
-            notification: { title, body: message }
+            notification: { title, body: message },
+            data: { action: action }
           });
         }
       }
