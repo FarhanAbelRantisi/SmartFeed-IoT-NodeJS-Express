@@ -2,39 +2,65 @@ const { admin, db } = require('../config/firebase');
 
 function listenCarts() {
   db.collection('cart').onSnapshot(async (snapshot) => {
-    snapshot.docChanges().forEach(async (change) => {
+    for (const change of snapshot.docChanges()) {
       const cartData = change.doc.data();
-      const userId = cartData?.userId || change.doc?.userId; 
+
+      const userId = cartData?.createdBy;
+
+      if (!userId) {
+        console.log(`Skipping notification for doc ${change.doc.id}: userId (createdBy) not found.`);
+        continue;
+      }
 
       let tokens = [];
-      if (userId) {
+      try {
         const tokensSnap = await db.collection('users').doc(userId)
           .collection('device_tokens').get();
+
+        if (tokensSnap.empty) {
+            console.log(`No device tokens found for user: ${userId}`);
+            continue;
+        }
+
         tokensSnap.forEach(tokenDoc => tokens.push(tokenDoc.data().token));
-      }
 
-      let title = '';
-      let body = '';
+        let title = '';
+        let body = '';
 
-      if (change.type === 'added') {
-        title = 'New Cart Item Successfully Added';
-        body = 'A new item was added to your cart.';
-      } else if (change.type === 'modified') {
-        title = 'Cart Item Modified';
-        body = 'An item in your cart was updated.';
-      } else if (change.type === 'removed') {
-        title = 'Cart Item Deleted';
-        body = 'An item was removed from your cart.';
-      }
+        if (change.type === 'added') {
+          title = 'Item Baru Ditambahkan! 🎉';
+          body = `Item "${cartData.name}" telah ditambahkan ke keranjang Anda.`;
+        } else if (change.type === 'modified') {
+          title = 'Keranjang Diperbarui';
+          body = `Item "${cartData.name}" di keranjang Anda telah diubah.`;
+        } else if (change.type === 'removed') {
+          title = 'Item Dihapus';
+          body = `Satu item telah dihapus dari keranjang Anda.`;
+        }
 
-      if (tokens.length > 0 && title) {
-        await admin.messaging().sendEachForMulticast({
-          tokens,
-          notification: { title, body }
-        });
-        console.log(`Notification sent for cart item (${change.type}):`, change.doc.id);
+        if (tokens.length > 0 && title) {
+          const message = {
+            tokens: tokens,
+            notification: { title, body },
+            apns: {
+                payload: {
+                    aps: {
+                        'content-available': 1,
+                    },
+                },
+            },
+            android: {
+                priority: 'high',
+            }
+          };
+
+          await admin.messaging().sendEachForMulticast(message);
+          console.log(`Notification sent for user ${userId} (${change.type}):`, change.doc.id);
+        }
+      } catch (error) {
+        console.error(`Failed to process notification for user ${userId}:`, error);
       }
-    });
+    }
   });
 }
 
